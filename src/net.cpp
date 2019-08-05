@@ -222,7 +222,7 @@ bool IsPeerAddrLocalGood(CNode* pnode)
 }
 
 // pushes our own address to a peer
-void AdvertizeLocal(CNode* pnode)
+void AdvertiseLocal(CNode* pnode)
 {
     if (fListen && pnode->fSuccessfullyConnected) {
         CAddress addrLocal = GetLocalAddress(&pnode->addr);
@@ -1514,6 +1514,8 @@ void ThreadMessageHandler()
     boost::mutex condition_mutex;
     boost::unique_lock<boost::mutex> lock(condition_mutex);
 
+    static int64_t nLastRebroadcast = 0;
+
     SetThreadPriority(THREAD_PRIORITY_BELOW_NORMAL);
     while (true) {
         vector<CNode*> vNodesCopy;
@@ -1531,6 +1533,15 @@ void ThreadMessageHandler()
             pnodeTrickle = vNodesCopy[GetRand(vNodesCopy.size())];
 
         bool fSleep = true;
+
+        bool performRebroadcast = !IsInitialBlockDownload() && (GetTime() - nLastRebroadcast > 24 * 60 * 60);
+
+        // Logging from quato
+        if (IsInitialBlockDownload()){
+            LogPrintf("IsInitialBlockDownload() is TRUE\n");
+        } else {
+            LogPrintf("IsInitialBlockDownload() is FALSE\n");
+        }
 
         for (CNode* pnode : vNodesCopy) {
             if (pnode->fDisconnect)
@@ -1555,8 +1566,23 @@ void ThreadMessageHandler()
             // Send messages
             {
                 TRY_LOCK(pnode->cs_vSend, lockSend);
-                if (lockSend)
+                if (lockSend) {
                     g_signals.SendMessages(pnode, pnode == pnodeTrickle || pnode->fWhitelisted);
+
+                    if(performRebroadcast) {
+
+                        // Periodically clear setAddrKnown to allow refresh broadcasts
+                        if (nLastRebroadcast)
+                            pnode->setAddrKnown.clear();
+
+                        // Logging from quato
+                        LogPrintf("Rebroadcast our address with AdvertiseLocal\n");
+                        // Rebroadcast our address
+                        AdvertiseLocal(pnode);
+
+                        nLastRebroadcast = GetTime();
+                    }
+                }
             }
             boost::this_thread::interruption_point();
         }
