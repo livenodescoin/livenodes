@@ -14,6 +14,7 @@
 #include "sync.h"
 #include "util.h"
 
+#define MASTERNODES_DUMP_SECONDS (15 * 60)
 #define MASTERNODES_DSEG_SECONDS (3 * 60 * 60)
 
 using namespace std;
@@ -102,7 +103,7 @@ public:
     static CValidationState GetInputCheckingTx(const CTxIn& vin, CMutableTransaction&);
 
     /// Add an entry
-    bool Add(const CMasternode& mn);
+    bool Add(CMasternode& mn);
 
     ///return all MN's
     std::vector<CMasternode> GetFullMasternodeMap();

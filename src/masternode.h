@@ -114,10 +114,15 @@ private:
 
 public:
     enum state {
+        MASTERNODE_PRE_ENABLED,
         MASTERNODE_ENABLED,
         MASTERNODE_EXPIRED,
+        MASTERNODE_OUTPOINT_SPENT,
         MASTERNODE_REMOVE,
+        MASTERNODE_WATCHDOG_EXPIRED,
+        MASTERNODE_POSE_BAN,
         MASTERNODE_VIN_SPENT,
+        MASTERNODE_POS_ERROR
     };
 
     enum LevelValue : unsigned {
@@ -139,6 +144,7 @@ public:
     bool unitTest;
     bool allowFreeTx;
     int protocolVersion;
+    int nActiveState;
     int64_t nLastDsq; //the dsq count from the last dsq broadcast of this node
     CMasternodePing lastPing;
 
@@ -220,6 +226,13 @@ public:
 
     bool UpdateFromNewBroadcast(CMasternodeBroadcast& mnb);
 
+    inline uint64_t SliceHash(uint256& hash, int slice)
+    {
+        uint64_t n = 0;
+        memcpy(&n, &hash + slice * 64, 64);
+        return n;
+    }
+
     void Check(bool forceCheck = false);
 
     bool IsBroadcastedWithin(int seconds)
@@ -240,25 +253,24 @@ public:
         lastPing = CMasternodePing();
     }
 
-    bool IsEnabled() const
+    bool IsEnabled()
     {
         return activeState == MASTERNODE_ENABLED;
     }
 
     int GetMasternodeInputAge()
     {
-        auto chain_tip = chainActive.Tip();
+        if (chainActive.Tip() == NULL) return 0;
 
-        if (!chain_tip)
-            return 0;
-
-        if (!cacheInputAge) {
+        if (cacheInputAge == 0) {
             cacheInputAge = GetInputAge(vin);
-            cacheInputAgeBlock = chain_tip->nHeight;
+            cacheInputAgeBlock = chainActive.Tip()->nHeight;
         }
 
-        return cacheInputAge + (chain_tip->nHeight - cacheInputAgeBlock);
+        return cacheInputAge + (chainActive.Tip()->nHeight - cacheInputAgeBlock);
     }
+
+    std::string GetStatus();
 
     std::string Status()
     {
@@ -268,6 +280,7 @@ public:
         if (activeState == CMasternode::MASTERNODE_EXPIRED) strStatus = "EXPIRED";
         if (activeState == CMasternode::MASTERNODE_VIN_SPENT) strStatus = "VIN_SPENT";
         if (activeState == CMasternode::MASTERNODE_REMOVE) strStatus = "REMOVE";
+        if (activeState == CMasternode::MASTERNODE_POS_ERROR) strStatus = "POS_ERROR";
 
         return strStatus;
     }

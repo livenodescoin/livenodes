@@ -78,8 +78,8 @@ bool CMasternodeDB::Write(const CMasternodeMan& mnodemanToSave)
     //    FileCommit(fileout);
     fileout.fclose();
 
-    LogPrintf("Written info to mncache.dat  %dms\n", GetTimeMillis() - nStart);
-    LogPrintf("  %s\n", mnodemanToSave.ToString());
+    LogPrint("masternode","Written info to mncache.dat  %dms\n", GetTimeMillis() - nStart);
+    LogPrint("masternode","  %s\n", mnodemanToSave.ToString());
 
     return true;
 }
@@ -153,13 +153,13 @@ CMasternodeDB::ReadResult CMasternodeDB::Read(CMasternodeMan& mnodemanToLoad, bo
         return IncorrectFormat;
     }
 
-    LogPrintf("Loaded info from mncache.dat  %dms\n", GetTimeMillis() - nStart);
-    LogPrintf("  %s\n", mnodemanToLoad.ToString());
+    LogPrint("masternode","Loaded info from mncache.dat  %dms\n", GetTimeMillis() - nStart);
+    LogPrint("masternode","  %s\n", mnodemanToLoad.ToString());
     if (!fDryRun) {
-        LogPrintf("Masternode manager - cleaning....\n");
+        LogPrint("masternode","Masternode manager - cleaning....\n");
         mnodemanToLoad.CheckAndRemove(true);
-        LogPrintf("Masternode manager - result:\n");
-        LogPrintf("  %s\n", mnodemanToLoad.ToString());
+        LogPrint("masternode","Masternode manager - result:\n");
+        LogPrint("masternode","  %s\n", mnodemanToLoad.ToString());
     }
 
     return Ok;
@@ -172,24 +172,24 @@ void DumpMasternodes()
     CMasternodeDB mndb;
     CMasternodeMan tempMnodeman;
 
-    LogPrintf("Verifying mncache.dat format...\n");
+    LogPrint("masternode","Verifying mncache.dat format...\n");
     CMasternodeDB::ReadResult readResult = mndb.Read(tempMnodeman, true);
     // there was an error and it was not an error on file opening => do not proceed
     if (readResult == CMasternodeDB::FileError)
-        LogPrintf("Missing masternode cache file - mncache.dat, will try to recreate\n");
+        LogPrint("masternode","Missing masternode cache file - mncache.dat, will try to recreate\n");
     else if (readResult != CMasternodeDB::Ok) {
-        LogPrintf("Error reading mncache.dat: ");
+        LogPrint("masternode","Error reading mncache.dat: ");
         if (readResult == CMasternodeDB::IncorrectFormat)
-            LogPrintf("magic is ok but data has invalid format, will try to recreate\n");
+            LogPrint("masternode","magic is ok but data has invalid format, will try to recreate\n");
         else {
-            LogPrintf("file format is unknown or invalid, please fix it manually\n");
+            LogPrint("masternode","file format is unknown or invalid, please fix it manually\n");
             return;
         }
     }
-    LogPrintf("Writting info to mncache.dat...\n");
+    LogPrint("masternode","Writting info to mncache.dat...\n");
     mndb.Write(mnodeman);
 
-    LogPrintf("Masternode dump finished  %dms\n", GetTimeMillis() - nStart);
+    LogPrint("masternode","Masternode dump finished  %dms\n", GetTimeMillis() - nStart);
 }
 
 CMasternodeMan::CMasternodeMan()
@@ -210,7 +210,6 @@ CValidationState CMasternodeMan::GetInputCheckingTx(const CTxIn& vin, CMutableTr
     CMutableTransaction chk_tx;
 
     chk_tx.vin.push_back(vin);
-//    chk_tx.vout.push_back(CTxOut(9999.99 * COIN, obfuScationPool.collateralPubKey));
     chk_tx.vout.push_back(CTxOut(deposit - 0.01 * COIN, obfuScationPool.collateralPubKey));
 
     tx = chk_tx;
@@ -218,19 +217,21 @@ CValidationState CMasternodeMan::GetInputCheckingTx(const CTxIn& vin, CMutableTr
     return state;
 }
 
-bool CMasternodeMan::Add(const CMasternode& mn)
+bool CMasternodeMan::Add(CMasternode& mn)
 {
     LOCK(cs);
 
-    if(!mn.IsEnabled())
+    if (!mn.IsEnabled())
         return false;
 
-    if(Find(mn.vin))
-        return false;
+    CMasternode* pmn = Find(mn.vin);
+    if (pmn == NULL) {
+        LogPrint("masternode", "CMasternodeMan: Adding new Masternode %s - %i now\n", mn.vin.prevout.hash.ToString(), size() + 1);
+        vMasternodes.push_back(mn);
+        return true;
+    }
 
-    LogPrint("masternode", "CMasternodeMan: Adding new Masternode %s - %i now\n", mn.vin.prevout.hash.ToString(), size() + 1);
-    vMasternodes.push_back(mn);
-    return true;
+    return false;
 }
 
 std::vector<CMasternode> CMasternodeMan::GetFullMasternodeMap()
@@ -437,7 +438,7 @@ int CMasternodeMan::stable_size(unsigned mnlevel)
         if(!mn.IsEnabled())
             continue; // Skip not-enabled masternodes
 
-        ++nStable_size;
+        nStable_size++;
     }
 
     return nStable_size;
@@ -1081,20 +1082,18 @@ void CMasternodeMan::Remove(CTxIn vin)
 
 void CMasternodeMan::UpdateMasternodeList(CMasternodeBroadcast mnb)
 {
-    LOCK(cs);
     mapSeenMasternodePing.insert(std::make_pair(mnb.lastPing.GetHash(), mnb.lastPing));
     mapSeenMasternodeBroadcast.insert(std::make_pair(mnb.GetHash(), mnb));
+    masternodeSync.AddedMasternodeList(mnb.GetHash());
 
     LogPrint("masternode","CMasternodeMan::UpdateMasternodeList -- masternode=%s  addr=%s\n", mnb.vin.prevout.ToStringShort(), mnb.addr.ToString());
 
     CMasternode* pmn = Find(mnb.vin);
-
-    if (!pmn) {
-        if (Add(CMasternode{mnb}))
-            masternodeSync.AddedMasternodeList(mnb.GetHash());
-
-    } else if (pmn->UpdateFromNewBroadcast(mnb)) {
-        masternodeSync.AddedMasternodeList(mnb.GetHash());
+    if (pmn == NULL) {
+        CMasternode mn(mnb);
+        Add(mn);
+    } else {
+        pmn->UpdateFromNewBroadcast(mnb);
     }
 }
 
@@ -1102,8 +1101,7 @@ std::string CMasternodeMan::ToString() const
 {
     std::ostringstream info;
 
-    info << "Masternodes: " << vMasternodes.size() << ", peers who asked us for Masternode list: " << (int)mAskedUsForMasternodeList.size() << ", peers we asked for Masternode list: " << (int)mWeAskedForMasternodeList.size() << ", entries in Masternode list we asked for: " << mWeAskedForMasternodeListEntry.size() << ", nDsqCount: " << nDsqCount;
+    info << "Masternodes: " << (int)vMasternodes.size() << ", peers who asked us for Masternode list: " << (int)mAskedUsForMasternodeList.size() << ", peers we asked for Masternode list: " << (int)mWeAskedForMasternodeList.size() << ", entries in Masternode list we asked for: " << (int)mWeAskedForMasternodeListEntry.size() << ", nDsqCount: " << (int)nDsqCount;
 
     return info.str();
 }
-

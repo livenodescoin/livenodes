@@ -255,9 +255,7 @@ int64_t CMasternode::SecondsSincePayment()
 int64_t CMasternode::GetLastPaid()
 {
     CBlockIndex* pindexPrev = chainActive.Tip();
-
-    if (!pindexPrev)
-        return false;
+    if (pindexPrev == NULL) return false;
 
     CScript mnpayee;
     mnpayee = GetScriptForDestination(pubKeyCollateralAddress.GetID());
@@ -270,9 +268,11 @@ int64_t CMasternode::GetLastPaid()
     // use a deterministic offset to break a tie -- 2.5 minutes
     int64_t nOffset = hash.GetCompact(false) % 150;
 
-    const CBlockIndex* BlockReading = pindexPrev;
+    if (chainActive.Tip() == NULL) return false;
 
-    int nMnCount = mnodeman.CountEnabled(Level()) / 100 * 125;
+    const CBlockIndex* BlockReading = chainActive.Tip();
+
+    int nMnCount = mnodeman.CountEnabled(Level()) * 1.25;
     int n = 0;
     for (unsigned int i = 1; BlockReading && BlockReading->nHeight > 0; i++) {
         if (n >= nMnCount) {
@@ -290,10 +290,36 @@ int64_t CMasternode::GetLastPaid()
             }
         }
 
+        if (BlockReading->pprev == NULL) {
+            assert(BlockReading);
+            break;
+        }
         BlockReading = BlockReading->pprev;
     }
 
     return 0;
+}
+
+std::string CMasternode::GetStatus()
+{
+    switch (nActiveState) {
+    case CMasternode::MASTERNODE_PRE_ENABLED:
+        return "PRE_ENABLED";
+    case CMasternode::MASTERNODE_ENABLED:
+        return "ENABLED";
+    case CMasternode::MASTERNODE_EXPIRED:
+        return "EXPIRED";
+    case CMasternode::MASTERNODE_OUTPOINT_SPENT:
+        return "OUTPOINT_SPENT";
+    case CMasternode::MASTERNODE_REMOVE:
+        return "REMOVE";
+    case CMasternode::MASTERNODE_WATCHDOG_EXPIRED:
+        return "WATCHDOG_EXPIRED";
+    case CMasternode::MASTERNODE_POSE_BAN:
+        return "POSE_BAN";
+    default:
+        return "UNKNOWN";
+    }
 }
 
 bool CMasternode::IsValidNetAddr()
