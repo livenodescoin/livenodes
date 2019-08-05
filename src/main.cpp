@@ -3806,6 +3806,72 @@ bool static LoadBlockIndexDB(string& strError)
     pblocktree->ReadFlag("shutdown", fLastShutdownWasPrepared);
     LogPrintf("%s: Last shutdown was prepared: %s\n", __func__, fLastShutdownWasPrepared);
 
+    //Check for inconsistency with block file info and internal state
+    if (!fLastShutdownWasPrepared && !GetBoolArg("-forcestart", false) && !GetBoolArg("-reindex", false)) {
+        unsigned int nHeightLastBlockFile = vinfoBlockFile[nLastBlockFile].nHeightLast + 1;
+        if (vSortedByHeight.size() > nHeightLastBlockFile && pcoinsTip->GetBestBlock() != vSortedByHeight[nHeightLastBlockFile].second->GetBlockHash()) {
+            //The database is in a state where a block has been accepted and written to disk, but the
+            //transaction database (pcoinsTip) was not flushed to disk, and is therefore not in sync with
+            //the block index database.
+
+            if (!mapBlockIndex.count(pcoinsTip->GetBestBlock())) {
+                strError = "The wallet has been not been closed gracefully, causing the transaction database to be out of sync with the block database";
+                return false;
+            }
+            LogPrintf("%s : pcoinstip synced to block height %d, block index height %d\n", __func__,
+                mapBlockIndex[pcoinsTip->GetBestBlock()]->nHeight, vSortedByHeight.size());
+
+            //get the index associated with the point in the chain that pcoinsTip is synced to
+            CBlockIndex* pindexLastMeta = vSortedByHeight[vinfoBlockFile[nLastBlockFile].nHeightLast + 1].second;
+            CBlockIndex* pindex = vSortedByHeight[0].second;
+            unsigned int nSortedPos = 0;
+            for (unsigned int i = 0; i < vSortedByHeight.size(); i++) {
+                nSortedPos = i;
+                if (vSortedByHeight[i].first == mapBlockIndex[pcoinsTip->GetBestBlock()]->nHeight + 1) {
+                    pindex = vSortedByHeight[i].second;
+                    break;
+                }
+            }
+
+            // Start at the last block that was successfully added to the txdb (pcoinsTip) and manually add all transactions that occurred for each block up until
+            // the best known block from the block index db.
+            CCoinsViewCache view(pcoinsTip);
+            while (nSortedPos < vSortedByHeight.size()) {
+                CBlock block;
+                if (!ReadBlockFromDisk(block, pindex)) {
+                    strError = "The wallet has been not been closed gracefully and has caused corruption of blocks stored to disk. Data directory is in an unusable state";
+                    return false;
+                }
+
+                vector<CTxUndo> vtxundo;
+                vtxundo.reserve(block.vtx.size() - 1);
+                uint256 hashBlock = block.GetHash();
+                for (unsigned int i = 0; i < block.vtx.size(); i++) {
+                    CValidationState state;
+                    CTxUndo undoDummy;
+                    if (i > 0)
+                        vtxundo.push_back(CTxUndo());
+                    UpdateCoins(block.vtx[i], state, view, i == 0 ? undoDummy : vtxundo.back(), pindex->nHeight);
+                    view.SetBestBlock(hashBlock);
+                }
+
+                if (pindex->nHeight >= pindexLastMeta->nHeight)
+                    break;
+
+                pindex = vSortedByHeight[++nSortedPos].second;
+            }
+
+            // Save the updates to disk
+            if (!view.Flush() || !pcoinsTip->Flush())
+                LogPrintf("%s : failed to flush view\n", __func__);
+
+            LogPrintf("%s: Last block properly recorded: #%d %s\n", __func__, pindexLastMeta->nHeight,
+                pindexLastMeta->GetBlockHash().ToString().c_str());
+            LogPrintf("%s : pcoinstip=%d %s\n", __func__, mapBlockIndex[pcoinsTip->GetBestBlock()]->nHeight,
+                pcoinsTip->GetBestBlock().GetHex());
+        }
+    }
+
     // Check whether we need to continue reindexing
     bool fReindexing = false;
     pblocktree->ReadReindexing(fReindexing);
@@ -4465,11 +4531,14 @@ void static ProcessGetData(CNode* pfrom)
                     }
                 }
                 if (!pushed && inv.type == MSG_MASTERNODE_WINNER) {
-                    if (masternodePayments.mapMasternodePayeeVotes.count(inv.hash)) {
-                        CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+
+                auto mnw = masternodePayments.mapMasternodePayeeVotes.find(inv.hash);
+
+                if(mnw != masternodePayments.mapMasternodePayeeVotes.cend()) {
+                    CDataStream ss{SER_NETWORK, PROTOCOL_VERSION};
                         ss.reserve(1000);
-                        ss << masternodePayments.mapMasternodePayeeVotes[inv.hash];
-                        pfrom->PushMessage("mnw", ss);
+                    ss << mnw->second;
+                    pfrom->PushMessage("mnw", ss);
                         pushed = true;
                     }
                 }
@@ -4652,7 +4721,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->nStartingHeight, addrMe.ToString(), pfrom->id,
             remoteAddr);
 
-        AddTimeData(pfrom->addr, nTime);
+        int64_t nTimeOffset = nTime - GetTime();
+        pfrom->nTimeOffset = nTimeOffset;
+        AddTimeData(pfrom->addr, nTimeOffset);
     }
 
     else if (pfrom->nVersion == 0) {
@@ -4661,6 +4732,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         Misbehaving(pfrom->GetId(), 1);
         return false;
     }
+
+
+    else if (pfrom->DisconnectOldProtocol(ActiveProtocol(), strCommand)) {
+        // Instantly disconnect old protocol
+        return false;
+    }
+
 
     else if (strCommand == "verack") {
         pfrom->SetRecvVersion(min(pfrom->nVersion, PROTOCOL_VERSION));
