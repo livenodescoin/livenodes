@@ -3202,7 +3202,7 @@ bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& sta
     //If this is a reorg, check that it is not too deep
     int nMaxReorgDepth = GetArg("-maxreorg", Params().MaxReorganizationDepth());
     if (chainActive.Height() - nHeight >= nMaxReorgDepth)
-        return state.DoS(1, error("%s: forked chain older than max reorganization depth (height %d)", __func__, nHeight));
+        return state.DoS(1, error("%s: forked chain older than max reorganization depth (height %d)", __func__, chainActive.Height() - nHeight));
 
     // Check timestamp against prev
     if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast()) {
@@ -3245,16 +3245,22 @@ bool IsBlockHashInChain(const uint256& hashBlock)
     return chainActive.Contains(mapBlockIndex[hashBlock]);
 }
 
-bool IsTransactionInChain(uint256 txId, int& nHeightTx)
+bool IsTransactionInChain(const uint256& txId, int& nHeightTx, CTransaction& tx)
 {
     uint256 hashBlock;
-    CTransaction tx;
-    GetTransaction(txId, tx, hashBlock, true);
+    if (!GetTransaction(txId, tx, hashBlock, true))
+        return false;
     if (!IsBlockHashInChain(hashBlock))
         return false;
 
     nHeightTx = mapBlockIndex.at(hashBlock)->nHeight;
     return true;
+}
+
+bool IsTransactionInChain(const uint256& txId, int& nHeightTx)
+{
+    CTransaction tx;
+    return IsTransactionInChain(txId, nHeightTx, tx);
 }
 
 bool ContextualCheckBlock(const CBlock& block, CValidationState& state, CBlockIndex* const pindexPrev)
