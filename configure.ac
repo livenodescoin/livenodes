@@ -102,8 +102,8 @@ AC_ARG_VAR(PYTHONPATH, Augments the default search path for python module files)
 
 # Enable wallet
 AC_ARG_ENABLE([wallet],
-  [AS_HELP_STRING([--disable-wallet],
-  [disable wallet (enabled by default)])],
+  [AS_HELP_STRING([--enable-wallet],
+  [enable wallet (default is yes)])],
   [enable_wallet=$enableval],
   [enable_wallet=yes])
 
@@ -120,9 +120,9 @@ AC_ARG_ENABLE([upnp-default],
   [use_upnp_default=no])
 
 AC_ARG_ENABLE(tests,
-    AS_HELP_STRING([--disable-tests],[do not compile tests (default is to compile)]),
+    AS_HELP_STRING([--enable-tests],[compile tests (default is no)]),
     [use_tests=$enableval],
-    [use_tests=yes])
+    [use_tests=no])
 
 AC_ARG_ENABLE(gui-tests,
     AS_HELP_STRING([--disable-gui-tests],[do not compile GUI tests (default is to compile if GUI and tests enabled)]),
@@ -146,27 +146,27 @@ AC_ARG_WITH([qrencode],
   [use_qr=auto])
 
 AC_ARG_ENABLE([hardening],
-  [AS_HELP_STRING([--disable-hardening],
-  [do not attempt to harden the resulting executables (default is to harden when possible)])],
+  [AS_HELP_STRING([--enable-hardening],
+  [attempt to harden the resulting executables (default is yes)])],
   [use_hardening=$enableval],
-  [use_hardening=auto])
+  [use_hardening=yes])
 
 AC_ARG_ENABLE([reduce-exports],
   [AS_HELP_STRING([--enable-reduce-exports],
-  [attempt to reduce exported symbols in the resulting executables (default is no)])],
+  [attempt to reduce exported symbols in the resulting executables (default is yes)])],
   [use_reduce_exports=$enableval],
-  [use_reduce_exports=no])
+  [use_reduce_exports=auto])
 
 AC_ARG_ENABLE([ccache],
-  [AS_HELP_STRING([--disable-ccache],
-  [do not use ccache for building (default is to use if found)])],
+  [AS_HELP_STRING([--enable-ccache],
+  [use ccache for building (default is yes if ccache is found)])],
   [use_ccache=$enableval],
   [use_ccache=auto])
 
 AC_ARG_ENABLE([lcov],
   [AS_HELP_STRING([--enable-lcov],
   [enable lcov testing (default is no)])],
-  [use_lcov=$enableval],
+  [use_lcov=yes],
   [use_lcov=no])
 
 AC_ARG_ENABLE([lcov-branch-coverage],
@@ -513,7 +513,7 @@ AC_SEARCH_LIBS([inet_pton], [nsl resolv], [AC_DEFINE(HAVE_INET_PTON, 1, [Define 
 AC_CHECK_DECLS([strnlen])
 
 AC_CHECK_DECLS([le32toh, le64toh, htole32, htole64, be32toh, be64toh, htobe32, htobe64],,,
-		[#if HAVE_ENDIAN_H
+    [#if HAVE_ENDIAN_H
                  #include <endian.h>
                  #endif])
 
