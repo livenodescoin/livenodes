@@ -20,6 +20,7 @@ extern CWallet* pwalletMain;
 
 void StartShutdown();
 bool ShutdownRequested();
+/** Interrupt threads */
 void Shutdown();
 void Interrupt();
 void PrepareShutdown();

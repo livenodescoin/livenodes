@@ -1000,7 +1000,7 @@ bool AppInit2()
                 sourceFile.make_preferred();
                 backupFile.make_preferred();
                 if (boost::filesystem::exists(sourceFile)) {
-#if BOOST_VERSION >= 158000
+#if BOOST_VERSION >= 105800
                     try {
                         boost::filesystem::copy_file(sourceFile, backupFile);
                         LogPrintf("Creating backup of %s -> %s\n", sourceFile, backupFile);
@@ -1173,7 +1173,7 @@ bool AppInit2()
         SetProxy(NET_IPV6, addrProxy);
         SetProxy(NET_TOR, addrProxy);
         SetNameProxy(addrProxy);
-        SetReachable(NET_TOR); // by default, -proxy sets onion as reachable, unless -noonion later
+        SetLimited(NET_TOR, false); // by default, -proxy sets onion as reachable, unless -noonion later
     }
 
     // -onion can be used to set only a proxy for .onion, or override normal proxy for .onion addresses
@@ -1182,7 +1182,7 @@ bool AppInit2()
     std::string onionArg = GetArg("-onion", "");
     if (onionArg != "") {
         if (onionArg == "0") { // Handle -noonion/-onion=0
-            SetReachable(NET_TOR, false); // set onions as unreachable
+            SetLimited(NET_TOR); // set onions as unreachable
         } else {
             CService onionProxy;
             if (!Lookup(onionArg.c_str(), onionProxy, 9050, fNameLookup)) {
@@ -1192,7 +1192,7 @@ bool AppInit2()
             if (!addrOnion.IsValid())
                 return InitError(strprintf(_("Invalid -onion address or hostname: '%s'"), onionArg));
             SetProxy(NET_TOR, addrOnion);
-            SetReachable(NET_TOR);
+            SetLimited(NET_TOR, false);
         }
     }
 
@@ -1220,7 +1220,7 @@ bool AppInit2()
         } else {
             struct in_addr inaddr_any;
             inaddr_any.s_addr = INADDR_ANY;
-            fBound |= Bind(CService(in6addr_any, GetListenPort()), BF_NONE);
+            fBound |= Bind(CService((in6_addr)IN6ADDR_ANY_INIT, GetListenPort()), BF_NONE);
             fBound |= Bind(CService(inaddr_any, GetListenPort()), !fBound ? BF_REPORT_ERROR : BF_NONE);
         }
         if (!fBound)

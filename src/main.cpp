@@ -37,6 +37,9 @@
 #include <boost/filesystem/fstream.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/thread.hpp>
+#include <boost/foreach.hpp>
+#include <atomic>
+#include <queue>
 
 using namespace boost;
 using namespace std;
@@ -5588,7 +5591,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         static int64_t nLastRebroadcast;
         if (!IsInitialBlockDownload() && (GetTime() - nLastRebroadcast > 24 * 60 * 60)) {
             LOCK(cs_vNodes);
-            BOOST_FOREACH (CNode* pnode, vNodes) {
+            for (CNode* pnode : vNodes) {
                 // Periodically clear setAddrKnown to allow refresh broadcasts
                 if (nLastRebroadcast)
                     pnode->setAddrKnown.clear();
@@ -5631,7 +5634,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 if (pto->addr.IsLocal())
                     LogPrintf("Warning: not banning local peer %s!\n", pto->addr.ToString());
                 else {
-                    CNode::Ban(pto->addr);
+                    CNode::Ban(pto->addr, BanReasonNodeMisbehaving);
                 }
             }
             state.fShouldBan = false;
