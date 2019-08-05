@@ -1536,14 +1536,8 @@ void ThreadMessageHandler()
 
         bool performRebroadcast = !IsInitialBlockDownload() && (GetTime() - nLastRebroadcast > 24 * 60 * 60);
 
-        // Logging from quato
-        if (IsInitialBlockDownload()){
-            LogPrintf("IsInitialBlockDownload() is TRUE\n");
-        } else {
-            LogPrintf("IsInitialBlockDownload() is FALSE\n");
-        }
-
         for (CNode* pnode : vNodesCopy) {
+
             if (pnode->fDisconnect)
                 continue;
 
