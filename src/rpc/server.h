@@ -277,5 +277,6 @@ extern bool HTTPReq_REST(AcceptedConnection* conn,
     std::string& strURI,
     std::map<std::string, std::string>& mapHeaders,
     bool fRun);
+void RPCNotifyBlockChange(const uint256 nHeight);
 
 #endif // BITCOIN_RPCSERVER_H
