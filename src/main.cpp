@@ -3408,47 +3408,92 @@ bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex** ppindex, 
     }
 
     int nHeight = pindex->nHeight;
+    int splitHeight = -1;
 
     if (isPoS) {
         LOCK(cs_main);
 
+        // Blocks arrives in order, so if prev block is not the tip then we are on a fork.
+        // Extra info: duplicated blocks are skipping this checks, so we don't have to worry about those here.
+        bool isBlockFromFork = pindexPrev != nullptr && chainActive.Tip() != pindexPrev;
+
+        // Coin stake
+        CTransaction &stakeTxIn = block.vtx[1];
+
+        // Inputs
+        std::vector<CTxIn> lnoInputs;
+
+        for (const CTxIn& stakeIn : stakeTxIn.vin) {
+                lnoInputs.push_back(stakeIn);
+        }
+        const bool hasLNOInputs = !lnoInputs.empty();
+        // Check for serial double spent on the same block, TODO: Move this to the proper method..
+
+        for (const CTransaction& tx : block.vtx) {
+            for (const CTxIn& in: tx.vin) {
+
+                if(tx.IsCoinStake()) continue;
+                if(hasLNOInputs)
+                    // Check if coinstake input is double spent inside the same block
+                    for (const CTxIn& pivIn : lnoInputs){
+                        if(pivIn.prevout == in.prevout){
+                            // double spent coinstake input inside block
+                            return error("%s: double spent coinstake input inside block", __func__);
+                        }
+                    }
+            }
+        }
+
         // Check whether is a fork or not
-        if (pindexPrev != nullptr && !chainActive.Contains(pindexPrev)) {
+        if (isBlockFromFork) {
 
             // Start at the block we're adding on to
             CBlockIndex *prev = pindexPrev;
-            CTransaction &stakeTxIn = block.vtx[1];
-            int readBlock = 0;
+
             CBlock bl;
+            if (!ReadBlockFromDisk(bl, prev))
+                return error("%s: previous block %s not on disk", __func__, prev->GetBlockHash().GetHex());
+
+            int readBlock = 0;
             // Go backwards on the forked chain up to the split
-            do {
-                if(readBlock == Params().MaxReorganizationDepth()){
+            while (!chainActive.Contains(prev)) {
+
+                // Increase amount of read blocks
+                readBlock++;
+                // Check if the forked chain is longer than the max reorg limit
+                if (readBlock == Params().MaxReorganizationDepth()) {
                     // TODO: Remove this chain from disk.
                     return error("%s: forked chain longer than maximum reorg limit", __func__);
                 }
-                if(!ReadBlockFromDisk(bl, prev))
-                    // Previous block not on disk
-                    return error("%s: previous block %s not on disk", __func__, prev->GetBlockHash().GetHex());
-
-                readBlock++;
 
                 // Loop through every input from said block
-                for (CTransaction t : bl.vtx) {
-                    for (CTxIn in: t.vin) {
+                for (const CTransaction &t : bl.vtx) {
+                    for (const CTxIn &in: t.vin) {
                         // Loop through every input of the staking tx
-                        for (CTxIn stakeIn : stakeTxIn.vin) {
+                        for (const CTxIn &stakeIn : lnoInputs) {
                             // if it's already spent
-                            if (stakeIn.prevout == in.prevout) {
-                                // reject the block
-                                return state.DoS(100, error("%s: input already spent on a previous block", __func__));
+
+                            // First regular staking check
+                            if (hasLNOInputs) {
+                                if (stakeIn.prevout == in.prevout) {
+                                    return state.DoS(100, error("%s: input already spent on a previous block",
+                                                                __func__));
+                                }
+
                             }
                         }
                     }
                 }
-                prev = prev->pprev;
 
-            } while (!chainActive.Contains(prev));
+                // Prev block
+                prev = prev->pprev;
+                if (!ReadBlockFromDisk(bl, prev))
+                    // Previous block not on disk
+                    return error("%s: previous block %s not on disk", __func__, prev->GetBlockHash().GetHex());
+
+            }
         }
+
     }
 
     // Write block to history file
@@ -3594,7 +3639,7 @@ bool ProcessNewBlock(CValidationState& state, CNode* pfrom, CBlock* pblock, CDis
     if (!fLiteMode) {
         if (masternodeSync.RequestedMasternodeAssets > MASTERNODE_SYNC_LIST) {
             obfuScationPool.NewBlock();
-            masternodePayments.ProcessBlock(GetHeight() + 10);
+            masternodePayments.ProcessBlock(GetHeight());
         }
     }
 
