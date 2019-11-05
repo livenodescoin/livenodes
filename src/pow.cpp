@@ -19,7 +19,7 @@
 
 uint256 nPoSTargetLimit = (~uint256(0) >> 24);
 
-unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast)
+unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader* pblock)
 {
     /* current difficulty formula, LivenodesCoin - DarkGravity v3, written by Evan Duffield - evan@dashpay.io */
     const CBlockIndex* BlockLastSolved = pindexLast;

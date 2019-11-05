@@ -105,7 +105,14 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
     txNew.vin.resize(1);
     txNew.vin[0].prevout.SetNull();
     txNew.vout.resize(1);
-    txNew.vout[0].scriptPubKey = scriptPubKeyIn;
+    txNew.vout[0].SetEmpty();
+
+    if (fDebug) LogPrintf("CreateNewBlock() : chainActive.Height() = %s \n", chainActive.Height());
+    
+    if (chainActive.Height() >= Params().LAST_POW_BLOCK()) {
+        txNew.vout[0].scriptPubKey = scriptPubKeyIn;
+    }
+
     pblock->vtx.push_back(txNew);
 
     pblocktemplate->vTxFees.push_back(-1);   // updated at end
@@ -114,31 +121,10 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
     // ppcoin: if coinstake available add coinstake tx
     static int64_t nLastCoinStakeSearchTime = GetAdjustedTime(); // only initialized at startup
 
+    CMutableTransaction txCoinStake;
     if (fProofOfStake) {
-        boost::this_thread::interruption_point();
-        pblock->nTime = GetAdjustedTime();
-        CBlockIndex* pindexPrev = chainActive.Tip();
-        pblock->nBits = GetNextWorkRequired(pindexPrev);
-        CMutableTransaction txCoinStake;
-        int64_t nSearchTime = pblock->nTime; // search to current time
-        bool fStakeFound = false;
-        if (nSearchTime >= nLastCoinStakeSearchTime) {
-            unsigned int nTxNewTime = 0;
-            if (pwallet->CreateCoinStake(*pwallet, pblock->nBits, nSearchTime - nLastCoinStakeSearchTime, txCoinStake, nTxNewTime)) {
-                pblock->nTime = nTxNewTime;
-
-                LogPrintf("CreateNewBlock() if fProofOfStake: chainActive.Height() = %s \n", chainActive.Height());
-                pblock->vtx[0].vout[0].SetEmpty();
-
-                pblock->vtx.push_back(CTransaction(txCoinStake));
-                fStakeFound = true;
-            }
-            nLastCoinStakeSearchInterval = nSearchTime - nLastCoinStakeSearchTime;
-            nLastCoinStakeSearchTime = nSearchTime;
-        }
-
-        if (!fStakeFound)
-            return NULL;
+        pblock->vtx[0].vout[0].SetEmpty();
+        pblock->vtx.push_back(CTransaction(txCoinStake));
     }
 
     // Largest block you're willing to create:
@@ -160,6 +146,12 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
     // Collect memory pool transactions into the block
     CAmount nFees = 0;
 
+    int nHeight;
+    uint64_t nBlockSize = 1000;
+    uint64_t nBlockTx = 0;
+    int nBlockSigOps = 100;
+    bool fSortedByFee = (nBlockPrioritySize <= 0);
+    CBlockIndex* pindexPrev;
     {
         LOCK2(cs_main, mempool.cs);
 
@@ -185,6 +177,7 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
             double dPriority = 0;
             CAmount nTotalIn = 0;
             bool fMissingInputs = false;
+            uint256 txid = tx.GetHash();
             for (const CTxIn& txin : tx.vin) {
                 // Read prev transaction
                 if (!view.HaveCoins(txin.prevout.hash)) {
@@ -211,6 +204,7 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
                     nTotalIn += mempool.mapTx[txin.prevout.hash].GetTx().vout[txin.prevout.n].nValue;
                     continue;
                 }
+
                 const CCoins* coins = view.AccessCoins(txin.prevout.hash);
                 assert(coins);
 
@@ -240,11 +234,6 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
         }
 
         // Collect transactions into block
-        uint64_t nBlockSize = 1000;
-        uint64_t nBlockTx = 0;
-        int nBlockSigOps = 100;
-        bool fSortedByFee = (nBlockPrioritySize <= 0);
-
         TxPriorityCompare comparer(fSortedByFee);
         std::make_heap(vecPriority.begin(), vecPriority.end(), comparer);
 
@@ -335,8 +324,33 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
         txNew.vin[0].scriptSig = CScript() << nHeight << OP_0;
         CAmount block_value = GetBlockValue(nHeight - 1);
         // Compute final transaction.
-        if (!fProofOfStake) {
+        if (fProofOfStake) {
 
+            boost::this_thread::interruption_point();
+            pblock->nTime = GetAdjustedTime();
+
+            pblock->nBits = GetNextWorkRequired(pindexPrev, pblock);
+
+            int64_t nSearchTime = pblock->nTime; // search to current time
+            bool fStakeFound = false;
+            if (nSearchTime >= nLastCoinStakeSearchTime) {
+                unsigned int nTxNewTime = 0;
+                if (pwallet->CreateCoinStake(*pwallet, pblock->nBits, nSearchTime - nLastCoinStakeSearchTime, txCoinStake, nTxNewTime)) {
+                    pblock->nTime = nTxNewTime;
+
+                    if (fDebug) LogPrintf("CreateNewBlock() if fProofOfStake: chainActive.Height() = %s \n", chainActive.Height());
+
+                    pblock->vtx[1] = CTransaction(txCoinStake);
+                    fStakeFound = true;
+                }
+                nLastCoinStakeSearchInterval = nSearchTime - nLastCoinStakeSearchTime;
+                nLastCoinStakeSearchTime = nSearchTime;
+            }
+
+            if (!fStakeFound)
+                return nullptr;
+
+        } else {
             txNew.vout[0].nValue       = block_value + nFees;
             txNew.vout[0].scriptPubKey = scriptPubKeyIn;
             pblocktemplate->vTxFees[0] = -nFees;
@@ -358,7 +372,6 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
 
                 pblock->vtx[reward_tx_idx] = txReward;
             }
-
         }
 
         nLastBlockTx = nBlockTx;
@@ -369,18 +382,18 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
         pblock->hashPrevBlock = pindexPrev->GetBlockHash();
         if (!fProofOfStake)
             UpdateTime(pblock, pindexPrev);
-        pblock->nBits = GetNextWorkRequired(pindexPrev);
+        pblock->nBits = GetNextWorkRequired(pindexPrev, pblock);
         pblock->nNonce = 0;
         pblocktemplate->vTxSigOps[0] = GetLegacySigOpCount(pblock->vtx[0]);
 
         CValidationState state;
         LogPrintf("CreateNewBlock() if CValidationState: chainActive.Height() = %s \n", chainActive.Height());
         if (chainActive.Height() < Params().LAST_POW_BLOCK()) {
-          if (!TestBlockValidity(state, *pblock, pindexPrev, false, false)) {
-              LogPrintf("CreateNewBlock() : TestBlockValidity failed\n");
-              mempool.clear();
-              return NULL;
-          }
+              if (!TestBlockValidity(state, *pblock, pindexPrev, false, false)) {
+                  LogPrintf("CreateNewBlock() : TestBlockValidity failed\n");
+                  mempool.clear();
+                  return NULL;
+              }
         }
     }
 

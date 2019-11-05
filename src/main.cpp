@@ -1000,7 +1000,7 @@ bool MoneyRange(CAmount nValueOut)
     return nValueOut >= 0 && nValueOut <= Params().MaxMoneyOut();
 }
 
-bool CheckTransaction(const CTransaction& tx, CValidationState& state)
+bool CheckTransaction(const CTransaction& tx, CValidationState& state, const int64_t nBlockTime)
 {
     // Basic checks that don't depend on any context
     if (tx.vin.empty())
@@ -3169,7 +3169,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
 
     // Check transactions
     for (const CTransaction& tx : block.vtx)
-        if (!CheckTransaction(tx, state))
+        if (!CheckTransaction(tx, state, block.GetBlockTime()))
             return error("CheckBlock() : CheckTransaction failed");
 
     unsigned int nSigOps = 0;
@@ -3644,6 +3644,38 @@ bool ProcessNewBlock(CValidationState& state, CNode* pfrom, CBlock* pblock, CDis
             return error ("%s : CheckBlock FAILED for block %s", __func__, pblock->GetHash().GetHex());
         }
 
+        // stake input check for prevent "Spent Stake" vulnerability
+        if (pblock->IsProofOfStake()) {
+            CCoinsViewCache coins(pcoinsTip);
+            // check stake inputs in current coinsView and reject block if inputs are not allowed
+            if (!coins.HaveInputs(pblock->vtx[1])) {
+                std::pair<COutPoint, unsigned int> ProofOfStake = pblock->GetProofOfStake();
+
+                // the inputs are spent at the chain tip so we should look at the recently spent outputs
+                auto it = mapStakeSpent.find(ProofOfStake.first);
+                if (it == mapStakeSpent.end())
+                    return state.DoS(100, error("%s : stake input missing/spent", __func__));
+
+                // Check for coin age.
+                    // First try finding the previous transaction in database.
+                    CTransaction txPrev;
+                    uint256 hashBlockPrev;
+                    if (!GetTransaction(ProofOfStake.first.hash, txPrev, hashBlockPrev, true))
+                          return state.DoS(100, error("%s : stake failed to find vin transaction", __func__));
+                    // Find block in map.
+                    CBlockIndex* pindex = NULL;
+                    BlockMap::iterator itBlock = mapBlockIndex.find(hashBlockPrev);
+                    if (itBlock != mapBlockIndex.end())
+                          pindex = itBlock->second;
+                    else
+                          return state.DoS(100, error("%s : stake failed to find block index", __func__));
+                    // Check block time vs stake age requirement.
+                    if (pindex->GetBlockHeader().nTime + nStakeMinAge > ProofOfStake.second)
+                          return state.DoS(100, error("%s : stake under min. stake age", __func__));
+
+            }
+        }
+
         // Store to disk
         CBlockIndex* pindex = nullptr;
         bool ret = AcceptBlock (*pblock, state, &pindex, dbp, checked);
@@ -3715,14 +3747,18 @@ bool TestBlockValidity(CValidationState& state, const CBlock& block, CBlockIndex
     indexDummy.nHeight = pindexPrev->nHeight + 1;
 
     // NOTE: CheckBlockHeader is called by CheckBlock
-    if (!ContextualCheckBlockHeader(block, state, pindexPrev))
-        return false;
-    if (!CheckBlock(block, state, fCheckPOW, fCheckMerkleRoot))
-        return false;
-    if (!ContextualCheckBlock(block, state, pindexPrev))
-        return false;
-    if (!ConnectBlock(block, state, &indexDummy, viewNew, true))
-        return false;
+    if (!ContextualCheckBlockHeader(block, state, pindexPrev)) {
+        LogPrintf("TestBlockValidity(): !ContextualCheckBlockHeader"); return false;
+    }
+    if (!CheckBlock(block, state, fCheckPOW, fCheckMerkleRoot)) {
+        LogPrintf("TestBlockValidity(): !CheckBlock"); return false;
+    }
+    if (!ContextualCheckBlock(block, state, pindexPrev)) {
+        LogPrintf("TestBlockValidity(): !ContextualCheckBlock"); return false;
+    }
+    if (!ConnectBlock(block, state, &indexDummy, viewNew, true)) {
+        LogPrintf("TestBlockValidity(): !ConnectBlock"); return false;
+    }
     assert(state.IsValid());
 
     return true;

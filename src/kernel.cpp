@@ -301,8 +301,6 @@ bool CheckStakeKernelHash(unsigned int nBits, const CBlock blockFrom, const CTra
         return error("CheckStakeKernelHash() : nTime violation");
 
     if (chainActive.Height() > nVersionSecondFork) {
-        if (fDebug)
-            LogPrintf("Current block height=%d is more than nVersionSecondFork.\n Checking MinAge requirement!\n", chainActive.Height());
         if (nTimeBlockFrom + nStakeMinAge > nTimeTx) // Min age requirement
             return error("CheckStakeKernelHash() : min age violation - nTimeBlockFrom=%d nStakeMinAge=%d nTimeTx=%d", nTimeBlockFrom, nStakeMinAge, nTimeTx);
     }
