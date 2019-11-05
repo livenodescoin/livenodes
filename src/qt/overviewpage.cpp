@@ -295,6 +295,7 @@ void OverviewPage::updateMasternodeInfo()
    int mn1=0;
    int mn2=0;
    int mn3=0;
+   int mn4=0;
    int totalmn=0;
    std::vector<CMasternode> vMasternodes = mnodeman.GetFullMasternodeMap();
     for(auto& mn : vMasternodes)
@@ -307,18 +308,22 @@ void OverviewPage::updateMasternodeInfo()
            mn2++;break;
            case 3:
            mn3++;break;
+           case 4:
+           mn4++;break;
        }
 
     }
-    totalmn=mn1+mn2+mn3;
+    totalmn=mn1+mn2+mn3+mn4;
     ui->labelMnTotal_Value->setText(QString::number(totalmn));
 
     ui->graphMN1->setMaximum(totalmn);
     ui->graphMN2->setMaximum(totalmn);
     ui->graphMN3->setMaximum(totalmn);
+    ui->graphMN4->setMaximum(totalmn);
     ui->graphMN1->setValue(mn1);
     ui->graphMN2->setValue(mn2);
     ui->graphMN3->setValue(mn3);
+    ui->graphMN4->setValue(mn4);
 
     if(timerinfo_mn->interval() == 1000)
            timerinfo_mn->setInterval(180000);
@@ -327,6 +332,7 @@ void OverviewPage::updateMasternodeInfo()
     ui->label_lcolat->setText("1000 Coins");
     ui->label_mcolat->setText("2000 Coins");
     ui->label_fcolat->setText("5000 Coins");
+    ui->label_tcolat->setText("20000 Coins");
 
 }
 

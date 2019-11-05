@@ -344,6 +344,7 @@ unsigned CMasternode::Level(CAmount vin_val, int blockHeight)
         case 1000 * COIN: return 1;
         case 2000 * COIN: return 2;
         case 5000 * COIN: return 3;
+        case 20000 * COIN: return 4;
     }
   }
   return 0;

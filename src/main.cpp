@@ -1608,8 +1608,10 @@ CAmount GetBlockValue(int nHeight)
       nSubsidy = 4 * COIN;
     } else if (nHeight > 200000 && nHeight <= 300000) {
       nSubsidy = 3 * COIN;
-    } else if (nHeight > 300000) {
+    } else if (nHeight > 300000 && nHeight <= 335000) {
       nSubsidy = 2 * COIN;
+    } else if (nHeight > 335000) {
+      nSubsidy = 3 * COIN;
     }
 
     // Check if we reached the coin max supply.
@@ -1629,17 +1631,26 @@ int64_t GetMasternodePayment(int nHeight, unsigned mnlevel, int64_t blockValue)
     switch(mnlevel)
     {
         case 1:
+            if (nHeight >= 335000)
+               return blockValue * 0.03;
             if (nHeight >= 153000)
                return blockValue * 0.1;
             return blockValue * 0.15;
 
         case 2:
+            if (nHeight >= 335000)
+               return blockValue * 0.1;
             return blockValue * 0.25;
 
         case 3:
+            if (nHeight >= 335000)
+               return blockValue * 0.25;
             if (nHeight >= 153000)
                return blockValue * 0.6;
             return blockValue * 0.5;
+
+        case 4:
+            return blockValue * 0.6;
     }
 
     return 0;

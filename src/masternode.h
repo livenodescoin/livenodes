@@ -131,7 +131,7 @@ public:
     enum LevelValue : unsigned {
         UNSPECIFIED = 0u,
         MIN = 1u,
-        MAX = 3u,
+        MAX = 4u,
     };
 
     CTxIn vin;
