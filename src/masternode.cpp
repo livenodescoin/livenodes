@@ -307,7 +307,7 @@ int64_t CMasternode::GetLastPaid()
 
 std::string CMasternode::GetStatus()
 {
-    switch (ActiveState) {
+    switch (activeState) {
     case CMasternode::MASTERNODE_ACTIVE:
         return "ACTIVE";
     case CMasternode::MASTERNODE_ENABLED:
