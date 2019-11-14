@@ -234,65 +234,39 @@ CAmount CMasternodePayments::FillBlockPayee(CMutableTransaction& txNew, CAmount 
     if (!pindexPrev) return 0;
 
 
-    unsigned int level = CMasternode::LevelValue::MIN;
     CAmount mn_payments_total = 0;
 
     for(unsigned mnlevel = CMasternode::LevelValue::MIN; mnlevel <= CMasternode::LevelValue::MAX; ++mnlevel) {
-        bool hasPayment = true;
+
         CScript payee;
 
         //spork
         if (!masternodePayments.GetBlockPayee(pindexPrev->nHeight + 1, mnlevel, payee)) {
             //no masternode detected
             CMasternode* winningNode = mnodeman.GetCurrentMasterNode(mnlevel, 1);
-            if (winningNode) {
-            payee = GetScriptForDestination(winningNode->pubKeyCollateralAddress.GetID());
-            } else {
+
+            if(!winningNode) {
                 LogPrint("masternode","CreateNewBlock: Failed to detect masternode level %d to pay\n", mnlevel);
-                hasPayment = false;
+                continue;
             }
+
+            payee = GetScriptForDestination(winningNode->pubKeyCollateralAddress.GetID());
         }
 
-        CAmount blockValue = GetBlockValue(pindexPrev->nHeight);
-        CAmount masternodePayment = GetMasternodePayment(pindexPrev->nHeight, mnlevel, blockValue);
+        CAmount masternodePayment = GetMasternodePayment(pindexPrev->nHeight + 1, mnlevel, block_value);
 
+        if(!masternodePayment)
+            continue;
 
-        if (hasPayment) {
-            if (fProofOfStake) {
-                /**For Proof Of Stake vout[0] must be null
-                 * Stake reward can be split into many different outputs, so we must
-                 * use vout.size() to align with several different cases.
-                 * An additional output is appended as the masternode payment
-                 */
-                unsigned int i = txNew.vout.size();
-                txNew.vout.resize(i + 1);
-                txNew.vout[i].scriptPubKey = payee;
-                txNew.vout[i].nValue = masternodePayment;
-
-                //subtract mn payment from the stake reward
-                txNew.vout[i - level].nValue -= masternodePayment;
-            } else {
-                txNew.vout.resize(1 + level);
-                txNew.vout[level].scriptPubKey = payee;
-                txNew.vout[level].nValue = masternodePayment;
-                if (level == 1)
-                    txNew.vout[0].nValue = blockValue - masternodePayment;
-                else
-                    txNew.vout[0].nValue -= masternodePayment;
-}
-
+        txNew.vout.emplace_back(masternodePayment, payee);
+        
         mn_payments_total += masternodePayment;
 
         CTxDestination address1;
         ExtractDestination(payee, address1);
         CBitcoinAddress address2(address1);
 
-                level++;
-        LogPrint("masternode","Masternode payment of %s to %s\n", FormatMoney(masternodePayment).c_str(), address2.ToString().c_str());
-        } else {
-            if (!fProofOfStake)
-                txNew.vout[0].nValue = blockValue;
-        }
+        LogPrintf("Masternode payment of %s to %s\n", FormatMoney(masternodePayment).c_str(), address2.ToString().c_str());
     }
 
     return mn_payments_total;
