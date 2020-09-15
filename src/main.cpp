@@ -3180,20 +3180,22 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
 
     unsigned nLevel = 1u;
     // Check masternode payments
-    if (block.nTime > 1600104143 + 600 && block.IsProofOfStake()) {
+    if (nHeight >= 1234567890 && block.IsProofOfStake()) {
         const CTransaction& tx = block.vtx[1];
         const unsigned int outs = tx.vout.size();
         if (outs < 6) {
             return state.DoS(100, error("CheckBlock() : Couldn't find masternode/budget payment"), REJECT_INVALID, "bad-cb-payee");
         }
-        for (int i = 1; i <= tx.vout.size(); i++) {
-            if (!masternodePayments.ValidateMasternodeWinner(tx.vout[i], nLevel, nHeight)) {
-                return state.DoS(100, error("CheckBlock() : wrong masternode address"));
+        if (!IsInitialBlockDownload()) {
+            for (int i = 1; i <= tx.vout.size(); i++) {
+                if (!masternodePayments.ValidateMasternodeWinner(tx.vout[i], nLevel, nHeight)) {
+                    return state.DoS(100, error("CheckBlock() : wrong masternode address"));
+                }
+                nLevel++;
             }
-            nLevel++;
-        }
-        if (nLevel != 4u) {
-            return state.DoS(100, error("CheckBlock() : Couldn't find masternode/budget payment"), REJECT_INVALID, "bad-cb-payee");
+            if (nLevel != 4u) {
+                return state.DoS(100, error("CheckBlock() : Couldn't find masternode/budget payment"), REJECT_INVALID, "bad-cb-payee");
+            }
         }
     }
     
