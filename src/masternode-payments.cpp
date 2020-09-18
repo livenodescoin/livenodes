@@ -888,7 +888,7 @@ bool CMasternodePayments::ValidateMasternodeWinner(const CTxOut& mnPaymentOut, u
 
         CMasternode* pmn = mnodeman.GetNextMasternodeInQueueForPayment(nBlockHeight, nLevel, true, nCount);
         if (pmn != nullptr) {
-            payee == GetScriptForDestination(pmn->pubKeyCollateralAddress.GetID());
+            payee = GetScriptForDestination(pmn->pubKeyCollateralAddress.GetID());
         }
     }
 
