@@ -329,10 +329,10 @@ void OverviewPage::updateMasternodeInfo()
            timerinfo_mn->setInterval(180000);
   }
 
-    ui->label_lcolat->setText("1000 Coins");
-    ui->label_mcolat->setText("2000 Coins");
-    ui->label_fcolat->setText("5000 Coins");
-    ui->label_tcolat->setText("20000 Coins");
+    ui->label_lcolat->setText("5000 Coins");
+    ui->label_mcolat->setText("10000 Coins");
+    ui->label_fcolat->setText("25000 Coins");
+    ui->label_tcolat->setText("100000 Coins");
 
 }
 

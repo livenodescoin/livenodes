@@ -738,11 +738,20 @@ void StartDummyRPCThread()
     }
 }
 
+void InterruptRPC()
+{
+    LogPrintf("Interrupting RPC\n");
+    // Interrupt e.g. running longpolls
+    fRPCRunning = false;
+}
+
 void StopRPCThreads()
 {
     if (rpc_io_service == NULL) return;
+    /*
     // Set this to false first, so that longpolling loops will exit when woken up
     fRPCRunning = false;
+    */
 
     // First, cancel all timers and acceptors
     // This is not done automatically by ->stop(), and in some cases the destructor of

@@ -339,23 +339,35 @@ bool CMasternode::IsValidNetAddr()
 
 unsigned CMasternode::Level(CAmount vin_val, int blockHeight)
 {
-  if (blockHeight >= 335000) {
-    switch(vin_val) {
-        case 1000 * COIN: return 1;
-        case 2000 * COIN: return 2;
-        case 5000 * COIN: return 3;
-        case 20000 * COIN: return 4;
+    if (blockHeight >= 850000) {
+        switch(vin_val) {
+            case 5000 * COIN: return 1;
+            case 10000 * COIN: return 2;
+            case 25000 * COIN: return 3;
+            case 100000 * COIN: return 4;
+        }
+    } else if (blockHeight >= 839920 && blockHeight < 850000) {
+        if (vin_val == (5000 * COIN || 1000 * COIN)) {
+            return 1;
+        }
+        if (vin_val == (10000 * COIN || 2000 * COIN)) {
+            return 2;
+        }
+        if (vin_val == (25000 * COIN || 5000 * COIN)) {
+            return 3;
+        }
+        if (vin_val == (100000 * COIN || 20000 * COIN)) {
+            return 4;
+        }
+    } else {
+        switch(vin_val) {
+            case 1000 * COIN: return 1;
+            case 2000 * COIN: return 2;
+            case 5000 * COIN: return 3;
+            case 20000 * COIN: return 4;
+        }
     }
-  } else {
-    switch(vin_val) {
-        case 1000 * COIN: return 1;
-        case 2000 * COIN: return 2;
-        case 5000 * COIN: return 3;
-    }
-  }
-
-
-  return 0;
+    return 0;
 }
 
 unsigned CMasternode::Level(const CTxIn& vin, int blockHeight)
