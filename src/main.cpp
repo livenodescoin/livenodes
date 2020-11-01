@@ -3177,7 +3177,30 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
                 LogPrintf("CheckBlock(): Masternode payment check skipped on sync - skipping IsBlockPayeeValid()\n");
         }
     }
-
+/*
+    unsigned nLevel = 1;
+    // Check masternode payments
+    if (nHeight >= 850000 && block.IsProofOfStake()) {
+        const CTransaction& tx = block.vtx[1];
+        const unsigned int outs = tx.vout.size();
+        if (outs < 5) {
+            return state.DoS(100, error("CheckBlock() : Couldn't find masternode/budget payment"), REJECT_INVALID, "bad-cb-payee");
+        }
+        if (masternodeSync.IsSynced()) {
+            if (!IsInitialBlockDownload()) {
+                for (int i = 2; i <= tx.vout.size(); i++) {
+                    if (!masternodePayments.ValidateMasternodeWinner(tx.vout[i], nLevel, nHeight)) {
+                        return state.DoS(100, error("CheckBlock() : wrong masternode address"));
+                    }
+                    nLevel++;
+                }
+                if (nLevel != 4) {
+                    return state.DoS(100, error("CheckBlock() : Couldn't find masternode/budget payment"), REJECT_INVALID, "bad-cb-payee");
+                }
+            }
+        }
+    }
+*/
     // Check transactions
     for (const CTransaction& tx : block.vtx)
         if (!CheckTransaction(tx, state, block.GetBlockTime()))
@@ -5574,11 +5597,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 //       it was the one which was commented out
 int ActiveProtocol()
 {
-    if (IsSporkActive(SPORK_10_NEW_PROTOCOL_ENFORCEMENT_3))
-        return MIN_PEER_PROTO_VERSION_AFTER_ENFORCEMENT_3;
+    int nHeight = chainActive.Height();
 
-    if (IsSporkActive(SPORK_9_NEW_PROTOCOL_ENFORCEMENT_2))
-        return MIN_PEER_PROTO_VERSION_AFTER_ENFORCEMENT_2;
+    if (nHeight >= 850000) {
+        return MIN_PEER_PROTO_VERSION_AFTER_ENFORCEMENT;
+    }
 
     return MIN_PEER_PROTO_VERSION_BEFORE_ENFORCEMENT;
 }

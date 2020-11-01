@@ -164,6 +164,7 @@ static boost::thread_group threadGroup;
 
 void Interrupt()
 {
+    InterruptRPC();
     InterruptTorControl();
 }
 

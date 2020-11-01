@@ -42,6 +42,8 @@ void StartRPCThreads();
  * used. The RPC thread in this case is only used to handle timeouts.
  * If real RPC threads have already been started this is a no-op.
  */
+void InterruptRPC();
+
 void StartDummyRPCThread();
 /** Stop RPC threads */
 void StopRPCThreads();
