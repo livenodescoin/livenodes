@@ -347,16 +347,16 @@ unsigned CMasternode::Level(CAmount vin_val, int blockHeight)
             case 100000 * COIN: return 4;
         }
     } else if (blockHeight >= 839920 && blockHeight < 850000) {
-        if (vin_val == (5000 * COIN || 1000 * COIN)) {
+        if (vin_val == 5000 * COIN || vin_val == 1000 * COIN) {
             return 1;
         }
-        if (vin_val == (10000 * COIN || 2000 * COIN)) {
+        if (vin_val == 10000 * COIN || vin_val == 2000 * COIN) {
             return 2;
         }
-        if (vin_val == (25000 * COIN || 5000 * COIN)) {
+        if (vin_val == 25000 * COIN || vin_val == 5000 * COIN) {
             return 3;
         }
-        if (vin_val == (100000 * COIN || 20000 * COIN)) {
+        if (vin_val == 100000 * COIN || vin_val == 20000 * COIN) {
             return 4;
         }
     } else {
