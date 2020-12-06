@@ -215,9 +215,11 @@ bool IsBlockPayeeValid(const CBlock& block, int nBlockHeight)
 
     LogPrintf("Invalid mn payment detected %s\n", txNew.ToString().c_str());
 
-    if (nBlockHeight > 850000) {
+    if (IsSporkActive(SPORK_4_MASTERNODE_PAYMENT_ENFORCEMENT)) {
         return false;
     }
+    LogPrintf("Masternode payment enforcement is disabled, accepting block\n");
+
     return true;
 }
 
@@ -876,33 +878,6 @@ bool CMasternodePayments::ProcessBlock(int nBlockHeight)
 
     return true;
 }
-
-bool CMasternodePayments::ValidateMasternodeWinner(const CTxOut& mnPaymentOut, unsigned nLevel, int nBlockHeight)
-{
-    unsigned nCount = 0;
-    CScript payee;
-    if (!masternodePayments.GetBlockPayee(nBlockHeight, nLevel, payee)) {
-        //no masternode detected
-
-        CMasternode* pmn = mnodeman.GetNextMasternodeInQueueForPayment(nBlockHeight, nLevel, true, nCount);
-        if (pmn != nullptr) {
-            payee = GetScriptForDestination(pmn->pubKeyCollateralAddress.GetID());
-        }
-    }
-
-    CAmount nReward = GetBlockValue(nBlockHeight);
-    CAmount masternodePayment = GetMasternodePayment(nBlockHeight, nLevel, nReward);
-    if (mnPaymentOut.scriptPubKey != payee) {
-        LogPrintf("CMasternodePayments::ValidateMasternodeWinner() - script pubkey did not match\n");
-        return false;
-    }
-    if (mnPaymentOut.nValue < masternodePayment) {
-        LogPrintf("CMasternodePayments::ValidateMasternodeWinner() - masternodePayment did not match\n");
-        return false;
-    }
-    return true;
-}
-
 
 void CMasternodePaymentWinner::Relay()
 {

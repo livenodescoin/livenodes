@@ -317,7 +317,6 @@ public:
     std::string ToString() const;
     int GetOldestBlock();
     int GetNewestBlock();
-    bool ValidateMasternodeWinner(const CTxOut& mnPaymentOut, unsigned nLevel, int nBlockHeight);
 
     ADD_SERIALIZE_METHODS;
 
